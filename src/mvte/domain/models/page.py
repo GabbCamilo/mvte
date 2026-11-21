@@ -7,9 +7,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from mvte.domain.models.linguistic import Sentence, TextBlock
 
 
 class RegionKind(str, Enum):
@@ -310,6 +313,7 @@ class PageDocument:
     panels: list[Panel] = field(default_factory=list)
     regions: list[VisualRegion] = field(default_factory=list)
     associations: list[TextRegionAssociation] = field(default_factory=list)
+    text_blocks: list[TextBlock] = field(default_factory=list)
     revisions: list[RevisionEntry] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -337,6 +341,13 @@ class PageDocument:
                 return region
         return None
 
+    def find_sentence(self, sentence_id: str) -> Sentence | None:
+        for block in self.text_blocks:
+            for sentence in block.sentences:
+                if sentence.id == sentence_id:
+                    return sentence
+        return None
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
@@ -347,6 +358,7 @@ class PageDocument:
             "panels": [p.to_dict() for p in self.panels],
             "regions": [r.to_dict() for r in self.regions],
             "associations": [a.to_dict() for a in self.associations],
+            "text_blocks": [tb.to_dict() for tb in self.text_blocks],
             "revisions": [rev.to_dict() for rev in self.revisions],
             "metadata": self.metadata,
         }
@@ -356,6 +368,8 @@ class PageDocument:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PageDocument:
+        from mvte.domain.models.linguistic import TextBlock
+
         return cls(
             id=str(data["id"]),
             source_path=str(data["source_path"]),
@@ -365,6 +379,7 @@ class PageDocument:
             panels=[Panel.from_dict(p) for p in data.get("panels", [])],
             regions=[VisualRegion.from_dict(r) for r in data.get("regions", [])],
             associations=[TextRegionAssociation.from_dict(a) for a in data.get("associations", [])],
+            text_blocks=[TextBlock.from_dict(tb) for tb in data.get("text_blocks", [])],
             revisions=[RevisionEntry.from_dict(rev) for rev in data.get("revisions", [])],
             metadata=dict(data.get("metadata", {})),
         )

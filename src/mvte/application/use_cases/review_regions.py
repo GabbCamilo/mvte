@@ -89,6 +89,27 @@ class ReviewRegionsUseCase:
 
         raise KeyError(f"Association for region '{text_region_id}' not found")
 
+    def update_sentence_text(
+        self, document: PageDocument, sentence_id: str, new_text: str, note: str = ""
+    ) -> None:
+        sentence = document.find_sentence(sentence_id)
+        if sentence is None:
+            raise KeyError(f"Sentence '{sentence_id}' not found in PageDocument '{document.id}'")
+        old_text = sentence.text
+        sentence.text = new_text
+        sentence.needs_review = False
+        sentence.manual_override = True
+        document.revisions.append(
+            RevisionEntry.create(
+                action="update_sentence_text",
+                target_id=sentence_id,
+                field_name="text",
+                old_value=old_text,
+                new_value=new_text,
+                note=note,
+            )
+        )
+
     def revert_last_revision(self, document: PageDocument) -> RevisionEntry | None:
         """Undo the most recent manual revision on the PageDocument."""
         if not document.revisions:
@@ -106,6 +127,10 @@ class ReviewRegionsUseCase:
                     assoc.container_region_id = last.old_value
                     assoc.is_free_text = last.old_value is None
                     break
+        elif last.action == "update_sentence_text":
+            sentence = document.find_sentence(last.target_id)
+            if sentence is not None:
+                sentence.text = str(last.old_value)
         return last
 
     @staticmethod

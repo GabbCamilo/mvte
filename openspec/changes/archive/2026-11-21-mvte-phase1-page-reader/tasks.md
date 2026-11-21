@@ -18,6 +18,6 @@
 - [x] 3.3 Implementar visualizador GUI (PySide6) desacoplado para inspeção de máscaras e correção manual de regiões/associações (`mvte-gui`).
 
 ## 4. Testes e Validação
-- [ ] 4.1 Reunir conjunto inicial de páginas reais com licença verificada em `examples/` / `tests/benchmarks/`.
+- [x] 4.1 Reunir conjunto inicial de páginas reais com licença verificada em `examples/` / `tests/benchmarks/`.
 - [x] 4.2 Implementar testes unitários de domínio, associação geométrica e serialização (`pytest`).
 - [x] 4.3 Implementar testes de regressão de métricas (Precision/Recall/F1 de detecção e IoU/Dice de segmentação) e validar contra os critérios da spec.

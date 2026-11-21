@@ -9,8 +9,11 @@ import cv2
 import numpy as np
 
 from mvte.application.use_cases.analyze_page import AnalyzePageUseCase
+from mvte.application.use_cases.transcribe_page import TranscribePageUseCase
 from mvte.domain.models.page import PageDocument, ReadingDirection
 from mvte.infrastructure.storage.document_store import DocumentStore, load_image_lossless
+from mvte.modules.linguistic_analysis.reconstructor import SentenceReconstructor
+from mvte.modules.ocr.backends import MangaOcrAdapter, OcrRegistry, RapidOcrAdapter
 from mvte.modules.page_analysis.analyzer import ContourPageAnalyzer
 from mvte.modules.segmentation.segmenter import MaskSegmenter
 from mvte.modules.text_association.associator import SpatialRegionAssociator
@@ -67,6 +70,13 @@ def build_default_registry(onnx_model: str | None = None) -> DetectorRegistry:
     return registry
 
 
+def build_default_ocr_registry() -> OcrRegistry:
+    registry = OcrRegistry()
+    registry.register("rapidocr", RapidOcrAdapter)
+    registry.register("manga_ocr", MangaOcrAdapter)
+    return registry
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MVTE Phase 1 — Global Page Reader")
     parser.add_argument("image", type=Path, help="Path to manga/comic page image")
@@ -98,6 +108,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Save a visual overlay PNG for inspection",
     )
+    parser.add_argument(
+        "--transcribe",
+        action="store_true",
+        help="Run Phase 2 OCR and linguistic reconstruction",
+    )
+    parser.add_argument(
+        "--ocr-backend",
+        default="rapidocr",
+        help="OCR backend name (default: rapidocr)",
+    )
     args = parser.parse_args(argv)
 
     registry = build_default_registry(args.onnx_model)
@@ -116,6 +136,15 @@ def main(argv: list[str] | None = None) -> int:
         reading_direction=ReadingDirection(args.direction),
         persist=True,
     )
+
+    if args.transcribe:
+        ocr_backend = build_default_ocr_registry().create(args.ocr_backend)
+        transcribe_uc = TranscribePageUseCase(
+            ocr_backend=ocr_backend,
+            reconstructor=SentenceReconstructor(),
+            store=store,
+        )
+        doc = transcribe_uc.execute(doc, persist=True)
 
     if args.save_overlay:
         img_bgr, _, _ = load_image_lossless(args.image)
