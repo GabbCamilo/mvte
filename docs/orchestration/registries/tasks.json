@@ -1,0 +1,37 @@
+{
+  "tasks": [
+    {
+      "task_id": "CDO-BOOTSTRAP-001",
+      "title": "Descoberta do ambiente e documentação inicial de orquestração CDO",
+      "description": "Investigar ambiente, Git, OpenSpec e OpenCode CLI e gerar documentação e adaptador inicial.",
+      "objective": "Estabelecer governança multi-agente antes de qualquer delegação automatizada.",
+      "priority": "high",
+      "dependencies": [],
+      "assigned_agent": "Antigravity CDO",
+      "assigned_terminal": "local",
+      "selected_model": "native",
+      "allowed_files": [
+        "docs/orchestration/**",
+        "tools/orchestration/**",
+        "openspec/changes/cdo-orchestration-system/**"
+      ],
+      "prohibited_files": [
+        "src/mvte/domain/**",
+        "src/mvte/modules/**"
+      ],
+      "expected_outputs": [
+        "docs/orchestration/*.md",
+        "tools/orchestration/opencode_adapter.py",
+        "openspec/changes/cdo-orchestration-system/*"
+      ],
+      "verification_commands": [
+        "openspec validate cdo-orchestration-system"
+      ],
+      "retry_limit": 2,
+      "current_status": "REVIEWING",
+      "execution_history": [],
+      "validation_results": {},
+      "approval_status": "PENDING_HUMAN_REVIEW"
+    }
+  ]
+}

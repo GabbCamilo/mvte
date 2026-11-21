@@ -1,0 +1,17 @@
+{
+  "executors": [
+    {
+      "id": "opencode-cli",
+      "type": "terminal",
+      "executable": "C:\\Users\\Gabriel\\AppData\\Roaming\\npm\\opencode.cmd",
+      "version": "1.19.5",
+      "os": "windows",
+      "headless": true,
+      "json_output": true,
+      "session_continuity": true,
+      "auth_providers": ["openrouter"],
+      "forbidden_flags": ["--auto"],
+      "notes": "Ignorar C:\\Users\\Gabriel\\.bun\\bin\\opencode.exe (shim quebrado)."
+    }
+  ]
+}
