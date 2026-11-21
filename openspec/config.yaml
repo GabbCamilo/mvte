@@ -1,0 +1,22 @@
+schema: spec-driven
+
+context: |
+  Projeto: MVTE (Manga Vision & Translation Engine).
+  Sistema independente, modular e exclusivamente local para leitura, interpretação,
+  tradução contextual e reconstrução visual de páginas de mangá e quadrinhos.
+  Compatível com Windows e Linux, com adaptadores para CPU e GPU (NVIDIA/AMD/ONNX).
+  Proibido acoplamento direto com o Manga Archive Manager (MAM).
+  Idioma padrão da documentação e especificações: Português (Brasil), mantendo termos técnicos padrão em inglês quando apropriado.
+
+rules:
+  proposal:
+    - Declarar explicitamente o escopo e o que está fora de escopo.
+    - Referenciar a fase de desenvolvimento correspondente.
+  specs:
+    - Escrever cenários verificáveis utilizando estritamente WHEN e THEN (e AND quando necessário).
+    - Separar requisitos funcionais de decisões tecnológicas ou bibliotecas específicas.
+  design:
+    - Manter separação clara entre domínio, aplicação, infraestrutura, módulos e interfaces.
+    - Garantir rastreabilidade com os requisitos da spec.
+  tasks:
+    - Quebrar tarefas em unidades testáveis e verificáveis, incluindo critérios de aceitação e testes automatizados.
