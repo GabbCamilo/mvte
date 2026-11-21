@@ -195,3 +195,10 @@ def test_rf05_association_and_manual_review_history(tmp_path: Path) -> None:
     review.revert_last_revision(doc)
     assert doc.regions[2].kind == RegionKind.FREE_TEXT
     assert len(doc.revisions) == 0
+
+
+def test_gui_default_workspace_is_absolute_and_writable() -> None:
+    from mvte.interfaces.gui.main import default_gui_workspace_dir
+
+    ws = default_gui_workspace_dir()
+    assert ws.is_absolute()

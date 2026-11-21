@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -31,15 +33,24 @@ from mvte.modules.text_association.associator import SpatialRegionAssociator
 from mvte.modules.visual_detection.detector import MorphologicalBalloonDetector
 
 
+def default_gui_workspace_dir() -> Path:
+    """Resolve a writable workspace directory regardless of current working directory."""
+    env_dir = os.environ.get("MVTE_WORKSPACE_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path.home() / ".mvte" / "gui_runs"
+
+
 class PageReviewWindow(QMainWindow):
     """Lightweight review window decoupled from domain/pipeline internals."""
 
-    def __init__(self, workspace_dir: Path | str = "storage/gui_runs") -> None:
+    def __init__(self, workspace_dir: Path | str | None = None) -> None:
         super().__init__()
         self.setWindowTitle("MVTE — Leitor Global de Páginas (Fase 1)")
         self.resize(1180, 820)
 
-        self.store = DocumentStore(workspace_dir)
+        resolved_dir = Path(workspace_dir) if workspace_dir is not None else default_gui_workspace_dir()
+        self.store = DocumentStore(resolved_dir)
         self.analyze_uc = AnalyzePageUseCase(
             page_analyzer=ContourPageAnalyzer(),
             detector=MorphologicalBalloonDetector(),
@@ -92,11 +103,18 @@ class PageReviewWindow(QMainWindow):
         )
         if not file_path:
             return
-        self.current_doc = self.analyze_uc.execute(
-            Path(file_path), reading_direction=ReadingDirection.RTL, persist=True
-        )
-        self.current_image_bgr, _, _ = load_image_lossless(file_path)
-        self._refresh_view()
+        try:
+            self.current_doc = self.analyze_uc.execute(
+                Path(file_path), reading_direction=ReadingDirection.RTL, persist=True
+            )
+            self.current_image_bgr, _, _ = load_image_lossless(file_path)
+            self._refresh_view()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Erro ao abrir página",
+                f"Não foi possível analisar a página:\n{type(exc).__name__}: {exc}",
+            )
 
     def _refresh_view(self) -> None:
         if self.current_doc is None or self.current_image_bgr is None:
