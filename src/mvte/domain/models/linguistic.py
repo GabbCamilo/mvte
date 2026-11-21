@@ -61,6 +61,9 @@ class Sentence:
     confidence: float = 1.0
     needs_review: bool = False
     manual_override: bool = False
+    translation: str = ""
+    translation_confidence: float = 0.0
+    translation_needs_review: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +76,9 @@ class Sentence:
             "confidence": round(float(self.confidence), 4),
             "needs_review": self.needs_review,
             "manual_override": self.manual_override,
+            "translation": self.translation,
+            "translation_confidence": round(float(self.translation_confidence), 4),
+            "translation_needs_review": self.translation_needs_review,
         }
 
     @classmethod
@@ -88,6 +94,9 @@ class Sentence:
             confidence=float(data.get("confidence", 1.0)),
             needs_review=bool(data.get("needs_review", False)),
             manual_override=bool(data.get("manual_override", False)),
+            translation=str(data.get("translation", "")),
+            translation_confidence=float(data.get("translation_confidence", 0.0)),
+            translation_needs_review=bool(data.get("translation_needs_review", False)),
         )
 
 

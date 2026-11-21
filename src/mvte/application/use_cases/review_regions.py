@@ -110,6 +110,27 @@ class ReviewRegionsUseCase:
             )
         )
 
+    def update_sentence_translation(
+        self, document: PageDocument, sentence_id: str, new_translation: str, note: str = ""
+    ) -> None:
+        sentence = document.find_sentence(sentence_id)
+        if sentence is None:
+            raise KeyError(f"Sentence '{sentence_id}' not found in PageDocument '{document.id}'")
+        old_translation = sentence.translation
+        sentence.translation = new_translation
+        sentence.translation_needs_review = False
+        sentence.manual_override = True
+        document.revisions.append(
+            RevisionEntry.create(
+                action="update_sentence_translation",
+                target_id=sentence_id,
+                field_name="translation",
+                old_value=old_translation,
+                new_value=new_translation,
+                note=note,
+            )
+        )
+
     def revert_last_revision(self, document: PageDocument) -> RevisionEntry | None:
         """Undo the most recent manual revision on the PageDocument."""
         if not document.revisions:
@@ -131,6 +152,10 @@ class ReviewRegionsUseCase:
             sentence = document.find_sentence(last.target_id)
             if sentence is not None:
                 sentence.text = str(last.old_value)
+        elif last.action == "update_sentence_translation":
+            sentence = document.find_sentence(last.target_id)
+            if sentence is not None:
+                sentence.translation = str(last.old_value)
         return last
 
     @staticmethod
