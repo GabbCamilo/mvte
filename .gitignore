@@ -7,6 +7,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv-train/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -19,6 +20,8 @@ models/*.onnx
 models/*.bin
 models/*.gguf
 models/*.safetensors
+*.pt
+runs/
 datasets/
 storage/
 
