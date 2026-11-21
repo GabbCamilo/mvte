@@ -21,6 +21,7 @@ from mvte.modules.visual_detection.detector import (
     DetectorRegistry,
     MorphologicalBalloonDetector,
     OnnxVisualDetector,
+    resolve_default_detector,
 )
 
 
@@ -64,6 +65,7 @@ def render_debug_overlay(image_bgr: np.ndarray, document: PageDocument) -> np.nd
 
 def build_default_registry(onnx_model: str | None = None) -> DetectorRegistry:
     registry = DetectorRegistry()
+    registry.register("auto", resolve_default_detector)
     registry.register("morphological", MorphologicalBalloonDetector)
     if onnx_model:
         registry.register("onnx", lambda: OnnxVisualDetector(onnx_model))
@@ -94,8 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--detector",
-        default="morphological",
-        help="Detector backend name (default: morphological)",
+        default="auto",
+        help="Detector backend name (default: auto)",
     )
     parser.add_argument(
         "--onnx-model",

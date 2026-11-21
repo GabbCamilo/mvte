@@ -30,7 +30,7 @@ from mvte.interfaces.cli.main import render_debug_overlay
 from mvte.modules.page_analysis.analyzer import ContourPageAnalyzer
 from mvte.modules.segmentation.segmenter import MaskSegmenter
 from mvte.modules.text_association.associator import SpatialRegionAssociator
-from mvte.modules.visual_detection.detector import MorphologicalBalloonDetector
+from mvte.modules.visual_detection.detector import resolve_default_detector
 
 
 def default_gui_workspace_dir() -> Path:
@@ -53,7 +53,7 @@ class PageReviewWindow(QMainWindow):
         self.store = DocumentStore(resolved_dir)
         self.analyze_uc = AnalyzePageUseCase(
             page_analyzer=ContourPageAnalyzer(),
-            detector=MorphologicalBalloonDetector(),
+            detector=resolve_default_detector(),
             segmenter=MaskSegmenter(),
             associator=SpatialRegionAssociator(),
             store=self.store,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -164,3 +165,73 @@ class DetectorRegistry:
 
     def list_backends(self) -> list[str]:
         return sorted(self._factories)
+
+
+class RtDetrOnnxDetector:
+    """Neural ONNX detector for ogkalu/comic-text-and-bubble-detector (RT-DETRv2)."""
+
+    def __init__(
+        self,
+        model_path: Path | str,
+        input_size: int = 640,
+        conf_threshold: float = 0.45,
+        prefer_gpu: bool = True,
+    ) -> None:
+        self.name = f"rtdetr_onnx:{Path(model_path).stem}"
+        self.session = OnnxSessionWrapper(model_path, prefer_gpu=prefer_gpu)
+        self.input_size = input_size
+        self.conf_threshold = conf_threshold
+        self.class_map = {
+            0: RegionKind.SPEECH_BALLOON,
+            1: RegionKind.FREE_TEXT,  # text inside bubble (linked by SpatialRegionAssociator)
+            2: RegionKind.FREE_TEXT,  # free text / SFX / dark narration box
+        }
+
+    def detect(self, image_bgr: np.ndarray) -> list[RawDetection]:
+        self.session.load()
+        orig_h, orig_w = image_bgr.shape[:2]
+        resized = cv2.resize(image_bgr, (self.input_size, self.input_size), interpolation=cv2.INTER_LINEAR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        chw = np.transpose(rgb, (2, 0, 1))[None, ...]
+        orig_sizes = np.array([[orig_h, orig_w]], dtype=np.int64)
+
+        labels, boxes, scores = self.session.run(
+            {"images": chw, "orig_target_sizes": orig_sizes}
+        )
+
+        detections: list[RawDetection] = []
+        for lbl, box, score in zip(labels[0], boxes[0], scores[0]):
+            conf = float(score)
+            if conf < self.conf_threshold:
+                continue
+            x1, y1, x2, y2 = [int(round(v)) for v in box]
+            x1 = max(0, min(orig_w - 1, x1))
+            y1 = max(0, min(orig_h - 1, y1))
+            x2 = max(x1 + 1, min(orig_w, x2))
+            y2 = max(y1 + 1, min(orig_h, y2))
+            kind = self.class_map.get(int(lbl), RegionKind.UNKNOWN)
+            detections.append(
+                RawDetection(
+                    kind=kind,
+                    bbox=BoundingBox(x1, y1, x2, y2),
+                    confidence=conf,
+                )
+            )
+        return MorphologicalBalloonDetector._deduplicate_nms(detections, iou_threshold=0.65)
+
+    def unload(self) -> None:
+        self.session.unload()
+
+
+def resolve_default_detector(prefer_gpu: bool = True) -> VisualDetectorPort:
+    """Return RtDetrOnnxDetector if local ONNX weights exist, otherwise morphological baseline."""
+    models_root = Path(os.environ.get("MVTE_MODELS_DIR") or Path(__file__).resolve().parents[4] / "models")
+    candidates = [
+        models_root / "comic-text-and-bubble-detector_int8.onnx",
+        models_root / "detector_int8.onnx",
+        models_root / "detector.onnx",
+    ]
+    for path in candidates:
+        if path.exists():
+            return RtDetrOnnxDetector(path, prefer_gpu=prefer_gpu)
+    return MorphologicalBalloonDetector()
