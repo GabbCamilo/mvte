@@ -61,3 +61,16 @@ def test_trn02_yolo_line_normalization_and_prelabel_export(tmp_path: Path) -> No
         assert count == 1
         assert (ds / "dataset.yaml").exists()
         assert (ds / "labels" / "train" / "sample.txt").exists()
+
+
+def test_yolo_label_reviewer_roundtrip(tmp_path: Path) -> None:
+    from tools.training.label_reviewer import YoloBox, load_yolo_boxes, save_yolo_boxes
+
+    lbl = tmp_path / "page.txt"
+    boxes = [YoloBox(0, 10.0, 20.0, 110.0, 120.0), YoloBox(2, 200.0, 50.0, 300.0, 250.0)]
+    save_yolo_boxes(lbl, boxes, img_w=400, img_h=400)
+    loaded = load_yolo_boxes(lbl, img_w=400, img_h=400)
+    assert len(loaded) == 2
+    assert loaded[0].class_id == 0
+    assert loaded[1].class_id == 2
+    assert abs(loaded[0].x1 - 10.0) < 1.0
