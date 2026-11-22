@@ -206,18 +206,18 @@ class AnnotationCanvas(QWidget):
 class LabelReviewerWindow(QMainWindow):
     """Main window for reviewing and correcting YOLO dataset labels."""
 
-    def __init__(self, dataset_dir: Path, split: str = "train") -> None:
+    def __init__(self, dataset_dir: Path, split: str = "train", start_index: int = 0) -> None:
         super().__init__()
         self.dataset_dir = dataset_dir
         self.split = split
         self.images: list[Path] = []
-        self.index = 0
+        self.index = start_index
         self.undo_stack: list[list[YoloBox]] = []
 
         self.setWindowTitle("MVTE — Revisor de Rótulos YOLO (1/2/3 + Mouse)")
         self.resize(1320, 860)
         self._build_ui()
-        self._load_split(split)
+        self._load_split(split, start_index=start_index)
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -279,7 +279,7 @@ class LabelReviewerWindow(QMainWindow):
 
         layout.addLayout(side, stretch=1)
 
-    def _load_split(self, split: str) -> None:
+    def _load_split(self, split: str, start_index: int = 0) -> None:
         self.split = split
         img_dir = self.dataset_dir / "images" / split
         self.images = (
@@ -287,7 +287,7 @@ class LabelReviewerWindow(QMainWindow):
             if img_dir.exists()
             else []
         )
-        self.index = 0
+        self.index = max(0, min(start_index, len(self.images) - 1)) if self.images else 0
         self._load_current()
 
     def _label_path_for(self, img_path: Path) -> Path:
@@ -391,10 +391,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MVTE Interactive YOLO Label Reviewer")
     parser.add_argument("--dataset-dir", type=Path, default=Path("datasets/custom"))
     parser.add_argument("--split", choices=["train", "val"], default="train")
+    parser.add_argument("--start-index", type=int, default=0, help="0-based image index to start from")
     args = parser.parse_args(argv)
 
     app = QApplication(sys.argv)
-    win = LabelReviewerWindow(args.dataset_dir, split=args.split)
+    win = LabelReviewerWindow(args.dataset_dir, split=args.split, start_index=args.start_index)
     win.show()
     return app.exec()
 

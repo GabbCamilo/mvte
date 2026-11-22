@@ -224,8 +224,11 @@ class RtDetrOnnxDetector:
 
 
 def resolve_default_detector(prefer_gpu: bool = True) -> VisualDetectorPort:
-    """Return RtDetrOnnxDetector if local ONNX weights exist, otherwise morphological baseline."""
+    """Return custom YOLO11 ONNX if available, else RT-DETR ONNX, else morphological baseline."""
     models_root = Path(os.environ.get("MVTE_MODELS_DIR") or Path(__file__).resolve().parents[4] / "models")
+    custom_yolo = models_root / "mvte-custom-detector.onnx"
+    if custom_yolo.exists():
+        return Yolo11OnnxDetector(custom_yolo, prefer_gpu=prefer_gpu)
     candidates = [
         models_root / "comic-text-and-bubble-detector_int8.onnx",
         models_root / "detector_int8.onnx",
@@ -235,3 +238,74 @@ def resolve_default_detector(prefer_gpu: bool = True) -> VisualDetectorPort:
         if path.exists():
             return RtDetrOnnxDetector(path, prefer_gpu=prefer_gpu)
     return MorphologicalBalloonDetector()
+
+
+class Yolo11OnnxDetector:
+    """ONNX Runtime detector for MVTE custom-trained YOLO11 models (shape 1x(4+C)xN)."""
+
+    def __init__(
+        self,
+        model_path: Path | str,
+        input_size: int = 640,
+        conf_threshold: float = 0.35,
+        iou_threshold: float = 0.55,
+        prefer_gpu: bool = True,
+    ) -> None:
+        self.name = f"yolo11_onnx:{Path(model_path).stem}"
+        self.session = OnnxSessionWrapper(model_path, prefer_gpu=prefer_gpu)
+        self.input_size = input_size
+        self.conf_threshold = conf_threshold
+        self.iou_threshold = iou_threshold
+        self.class_map = {
+            0: RegionKind.SPEECH_BALLOON,
+            1: RegionKind.FREE_TEXT,  # text_bubble -> linked to balloon by SpatialRegionAssociator
+            2: RegionKind.FREE_TEXT,  # text_free / SFX / dark narration
+        }
+
+    def detect(self, image_bgr: np.ndarray) -> list[RawDetection]:
+        self.session.load()
+        orig_h, orig_w = image_bgr.shape[:2]
+        resized = cv2.resize(image_bgr, (self.input_size, self.input_size), interpolation=cv2.INTER_LINEAR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        chw = np.transpose(rgb, (2, 0, 1))[None, ...]
+
+        input_name = self.session._session.get_inputs()[0].name
+        outputs = self.session.run({input_name: chw})
+        return self._decode_outputs(outputs[0], orig_w, orig_h)
+
+    def _decode_outputs(self, raw_out: np.ndarray, orig_w: int, orig_h: int) -> list[RawDetection]:
+        preds = np.squeeze(raw_out, axis=0)
+        if preds.ndim != 2 or preds.shape[0] < 5:
+            return []
+        # Shape (4+C, N) -> transpose to (N, 4+C)
+        rows = preds.T
+        boxes_cxcywh = rows[:, :4]
+        class_scores = rows[:, 4:]
+        cls_ids = np.argmax(class_scores, axis=1)
+        confs = class_scores[np.arange(len(rows)), cls_ids]
+
+        keep = confs >= self.conf_threshold
+        if not np.any(keep):
+            return []
+
+        scale_x = orig_w / float(self.input_size)
+        scale_y = orig_h / float(self.input_size)
+        detections: list[RawDetection] = []
+        for (cx, cy, bw, bh), conf, cls_id in zip(boxes_cxcywh[keep], confs[keep], cls_ids[keep]):
+            x1 = max(0, min(orig_w - 1, int(round((cx - bw / 2.0) * scale_x))))
+            y1 = max(0, min(orig_h - 1, int(round((cy - bh / 2.0) * scale_y))))
+            x2 = max(x1 + 1, min(orig_w, int(round((cx + bw / 2.0) * scale_x))))
+            y2 = max(y1 + 1, min(orig_h, int(round((cy + bh / 2.0) * scale_y))))
+            kind = self.class_map.get(int(cls_id), RegionKind.UNKNOWN)
+            detections.append(
+                RawDetection(
+                    kind=kind,
+                    bbox=BoundingBox(x1, y1, x2, y2),
+                    confidence=float(conf),
+                )
+            )
+
+        return MorphologicalBalloonDetector._deduplicate_nms(detections, iou_threshold=self.iou_threshold)
+
+    def unload(self) -> None:
+        self.session.unload()

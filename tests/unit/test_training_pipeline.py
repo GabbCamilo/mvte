@@ -74,3 +74,51 @@ def test_yolo_label_reviewer_roundtrip(tmp_path: Path) -> None:
     assert loaded[0].class_id == 0
     assert loaded[1].class_id == 2
     assert abs(loaded[0].x1 - 10.0) < 1.0
+
+
+def test_active_learning_seed_builder_preserves_reviewed(tmp_path: Path) -> None:
+    import os
+    from tools.training.active_relabel import build_curated_seed_dataset, find_reviewed_stems
+
+    src = tmp_path / "custom"
+    (src / "images" / "train").mkdir(parents=True)
+    (src / "labels" / "train").mkdir(parents=True)
+
+    old_lbl = src / "labels" / "train" / "old.txt"
+    new_lbl = src / "labels" / "train" / "reviewed1.txt"
+    (src / "images" / "train" / "old.png").write_bytes(_png_bytes("OLD"))
+    (src / "images" / "train" / "reviewed1.png").write_bytes(_png_bytes("NEW"))
+    old_lbl.write_text("0 0.5 0.5 0.2 0.2", encoding="utf-8")
+    new_lbl.write_text("2 0.5 0.5 0.3 0.3", encoding="utf-8")
+
+    os.utime(old_lbl, (1000.0, 1000.0))
+    os.utime(new_lbl, (5000.0, 5000.0))
+
+    stems = find_reviewed_stems(src / "labels" / "train", since_epoch=3000.0)
+    assert stems == {"reviewed1"}
+
+    seed = tmp_path / "seed"
+    train_n, val_n = build_curated_seed_dataset(src, seed, stems)
+    assert (train_n + val_n) == 1
+    assert (seed / "dataset.yaml").exists()
+
+
+def test_yolo11_onnx_decoder_and_default_resolver() -> None:
+    from mvte.domain.models.page import RegionKind
+    from mvte.modules.visual_detection.detector import Yolo11OnnxDetector, resolve_default_detector
+
+    det = Yolo11OnnxDetector("models/mvte-custom-detector.onnx", conf_threshold=0.5)
+    # Synthetic (1, 7, 2) output: [cx, cy, w, h, s0, s1, s2]
+    fake_out = np.zeros((1, 7, 2), dtype=np.float32)
+    fake_out[0, :4, 0] = [320.0, 320.0, 160.0, 80.0]
+    fake_out[0, 4, 0] = 0.92  # class 0: speech_balloon
+    fake_out[0, :4, 1] = [100.0, 100.0, 40.0, 20.0]
+    fake_out[0, 6, 1] = 0.20  # below threshold
+
+    results = det._decode_outputs(fake_out, orig_w=640, orig_h=640)
+    assert len(results) == 1
+    assert results[0].kind == RegionKind.SPEECH_BALLOON
+    assert results[0].confidence > 0.9
+
+    default_det = resolve_default_detector()
+    assert default_det.name.startswith(("yolo11_onnx", "rtdetr_onnx", "morphological"))
