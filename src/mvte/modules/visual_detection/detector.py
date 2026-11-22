@@ -224,20 +224,58 @@ class RtDetrOnnxDetector:
 
 
 def resolve_default_detector(prefer_gpu: bool = True) -> VisualDetectorPort:
-    """Return custom YOLO11 ONNX if available, else RT-DETR ONNX, else morphological baseline."""
+    """Return HybridEnsemble (YOLO11+RTDETR) when both exist, else single ONNX, else baseline."""
     models_root = Path(os.environ.get("MVTE_MODELS_DIR") or Path(__file__).resolve().parents[4] / "models")
     custom_yolo = models_root / "mvte-custom-detector.onnx"
-    if custom_yolo.exists():
-        return Yolo11OnnxDetector(custom_yolo, prefer_gpu=prefer_gpu)
-    candidates = [
+    rtdetr_candidates = [
         models_root / "comic-text-and-bubble-detector_int8.onnx",
         models_root / "detector_int8.onnx",
         models_root / "detector.onnx",
     ]
-    for path in candidates:
-        if path.exists():
-            return RtDetrOnnxDetector(path, prefer_gpu=prefer_gpu)
+    rtdetr_path = next((p for p in rtdetr_candidates if p.exists()), None)
+
+    if custom_yolo.exists() and rtdetr_path is not None:
+        return HybridEnsembleDetector(
+            primary=Yolo11OnnxDetector(custom_yolo, prefer_gpu=prefer_gpu),
+            secondary=RtDetrOnnxDetector(rtdetr_path, prefer_gpu=prefer_gpu),
+        )
+    if custom_yolo.exists():
+        return Yolo11OnnxDetector(custom_yolo, prefer_gpu=prefer_gpu)
+    if rtdetr_path is not None:
+        return RtDetrOnnxDetector(rtdetr_path, prefer_gpu=prefer_gpu)
     return MorphologicalBalloonDetector()
+
+
+class HybridEnsembleDetector:
+    """Combines custom YOLO11 (balloons/text_bubble) with RT-DETRv2 (complementary text_free/SFX)."""
+
+    def __init__(
+        self,
+        primary: VisualDetectorPort,
+        secondary: VisualDetectorPort,
+        complement_iou_threshold: float = 0.35,
+    ) -> None:
+        self.name = f"hybrid({primary.name}+{secondary.name})"
+        self.primary = primary
+        self.secondary = secondary
+        self.complement_iou_threshold = complement_iou_threshold
+
+    def detect(self, image_bgr: np.ndarray) -> list[RawDetection]:
+        primary_dets = self.primary.detect(image_bgr)
+        secondary_dets = self.secondary.detect(image_bgr)
+
+        merged = list(primary_dets)
+        for sec in secondary_dets:
+            if sec.kind != RegionKind.FREE_TEXT:
+                continue
+            if any(sec.bbox.iou(p.bbox) >= self.complement_iou_threshold for p in primary_dets):
+                continue
+            merged.append(sec)
+        return merged
+
+    def unload(self) -> None:
+        self.primary.unload()
+        self.secondary.unload()
 
 
 class Yolo11OnnxDetector:

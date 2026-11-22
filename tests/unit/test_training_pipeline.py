@@ -121,4 +121,43 @@ def test_yolo11_onnx_decoder_and_default_resolver() -> None:
     assert results[0].confidence > 0.9
 
     default_det = resolve_default_detector()
-    assert default_det.name.startswith(("yolo11_onnx", "rtdetr_onnx", "morphological"))
+    assert default_det.name.startswith(("hybrid", "yolo11_onnx", "rtdetr_onnx", "morphological"))
+
+
+def test_hyb01_hyb02_hybrid_ensemble_and_ctd_segmenter() -> None:
+    from mvte.domain.models.page import RegionKind
+    from mvte.domain.ports.vision import RawDetection
+    from mvte.modules.segmentation.segmenter import resolve_default_segmenter
+    from mvte.modules.visual_detection.detector import HybridEnsembleDetector
+
+    class Prim:
+        name = "prim"
+
+        def detect(self, img):
+            return [RawDetection(RegionKind.SPEECH_BALLOON, BoundingBox(10, 10, 100, 100), 0.9)]
+
+        def unload(self):
+            return None
+
+    class Sec:
+        name = "sec"
+
+        def detect(self, img):
+            return [
+                RawDetection(RegionKind.FREE_TEXT, BoundingBox(12, 12, 98, 98), 0.8),  # overlaps
+                RawDetection(RegionKind.FREE_TEXT, BoundingBox(200, 200, 280, 260), 0.85),  # unique
+            ]
+
+        def unload(self):
+            return None
+
+    ens = HybridEnsembleDetector(Prim(), Sec(), complement_iou_threshold=0.35)
+    img = np.full((300, 300, 3), 255, dtype=np.uint8)
+    dets = ens.detect(img)
+    assert len(dets) == 2
+    assert dets[0].kind == RegionKind.SPEECH_BALLOON
+    assert dets[1].kind == RegionKind.FREE_TEXT
+    ens.unload()
+
+    seg = resolve_default_segmenter()
+    assert seg is not None
